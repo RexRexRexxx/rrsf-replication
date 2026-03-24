@@ -4,7 +4,7 @@ mf.py — Model-Free (MF) reinforcement learning.
 Directly learns action values via SARSA (on-policy TD).
 No world model; no transfer across goals.
 
-Parameters (3): gamma, alpha, tau
+Parameters (3): gamma, alpha_Q, lam
 """
 
 import numpy as np
@@ -15,9 +15,9 @@ from env import Env
 class MF:
 
     PARAM_SPEC = [
-        ('gamma', 'logit'),
-        ('alpha', 'logit'),
-        ('tau',   'log'),
+        ('gamma',   'logit'), # \gamma
+        ('alpha_Q', 'logit'), # \alpha_Q (Q-value learning rate)
+        ('lam',     'log'),   # \lambda (Softmax temperature)
     ]
     N_PARAMS = len(PARAM_SPEC)
 
@@ -32,9 +32,9 @@ class MF:
         actions_in=None → sample actions (simulate mode).
         actions_in=list → use observed actions (likelihood mode).
         """
-        gamma = params['gamma']
-        alpha = params['alpha']
-        tau   = params['tau']
+        gamma   = params['gamma']
+        alpha_Q = params['alpha_Q']
+        lam     = params['lam']
 
         Q  = self._init_Q()
         ll = 0.0
@@ -45,7 +45,7 @@ class MF:
             Qg  = Q[goal_name]
 
             # ── Stage 1: root s=0 ─────────────────────────────────────────────
-            pi0 = softmax(Qg[0], tau)
+            pi0 = softmax(Qg[0], lam)
             if actions_in is None:
                 a0 = int(rng.choice(3, p=pi0))
             else:
@@ -54,7 +54,7 @@ class MF:
             s1 = Env.step(0, a0)
 
             # ── Stage 2: intermediate state s1 ───────────────────────────────
-            pi1 = softmax(Qg[s1], tau)
+            pi1 = softmax(Qg[s1], lam)
             if actions_in is None:
                 a1 = int(rng.choice(Env.N_ACTIONS[s1], p=pi1))
             else:
@@ -65,9 +65,9 @@ class MF:
 
             # ── TD updates (online, forward order) ───────────────────────────
             # s0→s1: no reward at s1; SARSA bootstrap with Q[s1][a1] (action taken)
-            Qg[0][a0]  += alpha * (gamma * Qg[s1][a1] - Qg[0][a0])
+            Qg[0][a0]  += alpha_Q * (gamma * Qg[s1][a1] - Qg[0][a0])
             # s1→s2: reward R; s2 is terminal so V(s2)=0
-            Qg[s1][a1] += alpha * (R - Qg[s1][a1])
+            Qg[s1][a1] += alpha_Q * (R - Qg[s1][a1])
 
             actions_out.append([a0, a1])
 

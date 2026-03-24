@@ -11,7 +11,7 @@ in 2 steps (no iterative loop needed):
 
 T̂ and d̂ are goal-independent; Q is recomputed fresh each trial using w_g.
 
-Parameters (4): gamma, tau, alpha_t, alpha_r
+Parameters (4): gamma, lam, alpha_t, alpha_phi
 """
 
 import numpy as np
@@ -22,10 +22,10 @@ from env import Env
 class MB:
 
     PARAM_SPEC = [
-        ('gamma',   'logit'),
-        ('tau',     'log'),
-        ('alpha_t', 'logit'),
-        ('alpha_r', 'logit'),
+        ('gamma',     'logit'), # \gamma
+        ('lam',       'log'),   # \lambda (Softmax temperature)
+        ('alpha_t',   'logit'), # \alpha_T (Transition learning rate)
+        ('alpha_phi', 'logit'), # \alpha_\varphi (Resource learning rate)
     ]
     N_PARAMS = len(PARAM_SPEC)
 
@@ -73,10 +73,10 @@ class MB:
         return Q
 
     def _run(self, trial_sequence, params, actions_in, rng):
-        gamma   = params['gamma']
-        tau     = params['tau']
-        alpha_t = params['alpha_t']
-        alpha_r = params['alpha_r']
+        gamma     = params['gamma']
+        lam       = params['lam']
+        alpha_t   = params['alpha_t']
+        alpha_phi = params['alpha_phi']
 
         T_hat, d_hat = self._init_world_model()
         ll = 0.0
@@ -87,7 +87,7 @@ class MB:
             Q   = self._value_iteration(T_hat, d_hat, w_g, gamma)
 
             # ── Stage 1 ───────────────────────────────────────────────────────
-            pi0 = softmax(Q[0], tau)
+            pi0 = softmax(Q[0], lam)
             if actions_in is None:
                 a0 = int(rng.choice(3, p=pi0))
             else:
@@ -96,7 +96,7 @@ class MB:
             s1 = Env.step(0, a0)
 
             # ── Stage 2 ───────────────────────────────────────────────────────
-            pi1 = softmax(Q[s1], tau)
+            pi1 = softmax(Q[s1], lam)
             if actions_in is None:
                 a1 = int(rng.choice(Env.N_ACTIONS[s1], p=pi1))
             else:
@@ -112,7 +112,7 @@ class MB:
 
             _update_T(0,  a0, s1)
             _update_T(s1, a1, s2)
-            d_hat[s2] += alpha_r * (Env.phi(s2) - d_hat[s2])
+            d_hat[s2] += alpha_phi * (Env.phi(s2) - d_hat[s2])
 
             actions_out.append([a0, a1])
 

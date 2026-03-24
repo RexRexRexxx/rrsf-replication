@@ -24,7 +24,7 @@ T̂ and d̂ are learned identically to the classical MB model.
 Note: this model showed the worst fit and was excluded from model recovery
 in the original paper due to computational cost at scale.
 
-Parameters (4): beta, gamma, alpha_t, alpha_r
+Parameters (4): lam, gamma, alpha_t, alpha_phi
 """
 
 import numpy as np
@@ -33,14 +33,13 @@ from env import Env
 
 
 class RRMB:
-
+    
     PARAM_SPEC = [
-        ('beta',    'log'),
-        ('gamma',   'logit'),
-        ('alpha_t', 'logit'),
-        ('alpha_r', 'logit'),
+        ('lam',       'log'),   # \lambda in paper
+        ('gamma',     'logit'), # \gamma in paper
+        ('alpha_t',   'logit'), # \alpha_T in paper
+        ('alpha_phi', 'logit'), # \alpha_\varphi in paper
     ]
-    N_PARAMS = len(PARAM_SPEC)
 
     SUCCESSORS = {
         0: [1, 2, 3],
@@ -57,8 +56,8 @@ class RRMB:
         }
         d_hat = {s: np.zeros(3) for s in Env.TERMINAL}
         return T_hat, d_hat
-
-    def _compute_Q(self, T_hat, d_hat, w_g, gamma, beta, pi0):
+    
+    def _compute_Q(self, T_hat, d_hat, w_g, gamma, lam, pi0):
         """
         Exact 2-step soft value iteration for one goal given a fixed π_0.
         Returns Q[s] arrays for all non-terminal states.
@@ -73,13 +72,14 @@ class RRMB:
                 for a1 in range(Env.N_ACTIONS[s1])
             ])
 
-        # Soft V*(s1,g) = β·log Σ_{a1} π_0(a1|s1)·exp(Q(g,s1,a1)/β)
+        # Soft V*(s1,g) = λ·log Σ_{a1} π_0(a1|s1)·exp(Q(g,s1,a1)/λ)
         V_soft = {}
         for s1 in [1, 2, 3]:
             q         = Q[s1]
             q_shifted = q - q.max()
-            V_soft[s1] = q.max() + beta * np.log(
-                np.sum(pi0[s1] * np.exp(q_shifted / beta))
+            # FIXED: 'beta' changed to 'lam' (\lambda)
+            V_soft[s1] = q.max() + lam * np.log(
+                np.sum(pi0[s1] * np.exp(q_shifted / lam))
             )
 
         # Stage-1: Q(g, 0, a0) = Σ_s1 T̂(s1|0,a0)·γ·V*(s1,g)
@@ -90,7 +90,7 @@ class RRMB:
         ])
         return Q
 
-    def _solve_pi0(self, T_hat, d_hat, gamma, beta, pi0_warm, max_iter=50, tol=1e-6):
+    def _solve_pi0(self, T_hat, d_hat, gamma, lam, pi0_warm, max_iter=50, tol=1e-6):
         """
         Find self-consistent π_0 via alternating updates (SI Note 6).
         π_0(a|s) = Σ_g p(g)·π(a|g,s), with uniform p(g) over training goals.
@@ -103,9 +103,11 @@ class RRMB:
             pi0_new = {s: np.zeros(Env.N_ACTIONS[s]) for s in Env.NON_TERMINAL}
             for goal_name in Env.TRAINING_GOALS:
                 w_g = Env.GOALS[goal_name]
-                Q   = self._compute_Q(T_hat, d_hat, w_g, gamma, beta, pi0)
+                # FIXED: Passing 'lam' instead of 'beta'
+                Q   = self._compute_Q(T_hat, d_hat, w_g, gamma, lam, pi0)
                 for s in Env.NON_TERMINAL:
-                    pi0_new[s] += rr_policy(Q[s], pi0[s], beta) / n_goals
+                    # FIXED: Passing 'lam' instead of 'beta'
+                    pi0_new[s] += rr_policy(Q[s], pi0[s], lam) / n_goals
 
             if all(np.max(np.abs(pi0_new[s] - pi0[s])) < tol
                    for s in Env.NON_TERMINAL):
@@ -115,10 +117,11 @@ class RRMB:
         return pi0
 
     def _run(self, trial_sequence, params, pi0_init, actions_in, rng):
-        beta    = params['beta']
-        gamma   = params['gamma']
-        alpha_t = params['alpha_t']
-        alpha_r = params['alpha_r']
+        # FIXED: Variable names updated to match the paper
+        lam       = params['lam']       # Cost sensitivity (\lambda)
+        gamma     = params['gamma']     # Future discount (\gamma)
+        alpha_t   = params['alpha_t']   # Transition learning rate (\alpha_T)
+        alpha_phi = params['alpha_phi'] # Resource learning rate (\alpha_\varphi)
 
         T_hat, d_hat = self._init_world_model()
         # π_0 warm-started from group-level histogram; re-solved each trial
@@ -131,11 +134,13 @@ class RRMB:
             w_g = Env.GOALS[goal_name]
 
             # Solve self-consistent π_0 for the current world model (SI Note 6)
-            pi0_active = self._solve_pi0(T_hat, d_hat, gamma, beta, pi0_active)
-            Q = self._compute_Q(T_hat, d_hat, w_g, gamma, beta, pi0_active)
+            pi0_active = self._solve_pi0(T_hat, d_hat, gamma, lam, pi0_active)
+            Q = self._compute_Q(T_hat, d_hat, w_g, gamma, lam, pi0_active)
 
             # ── Stage 1 ───────────────────────────────────────────────────────
-            pi0 = rr_policy(Q[0], pi0_active[0], beta)
+            # FIXED: Passing 'lam' instead of 'beta'
+            pi0 = rr_policy(Q[0], pi0_active[0], lam)
+            
             if actions_in is None:
                 a0 = int(rng.choice(3, p=pi0))
             else:
@@ -144,7 +149,9 @@ class RRMB:
             s1 = Env.step(0, a0)
 
             # ── Stage 2 ───────────────────────────────────────────────────────
-            pi1 = rr_policy(Q[s1], pi0_active[s1], beta)
+            # FIXED: Passing 'lam' instead of 'beta'
+            pi1 = rr_policy(Q[s1], pi0_active[s1], lam)
+            
             if actions_in is None:
                 a1 = int(rng.choice(Env.N_ACTIONS[s1], p=pi1))
             else:
@@ -160,7 +167,10 @@ class RRMB:
 
             _update_T(0,  a0, s1)
             _update_T(s1, a1, s2)
-            d_hat[s2] += alpha_r * (Env.phi(s2) - d_hat[s2])
+            
+            # FIXED: Using 'alpha_phi' instead of 'alpha_r' 
+            # This directly aligns with Equation 12: \phi(s') = \phi(s') + \alpha_\phi (...)
+            d_hat[s2] += alpha_phi * (Env.phi(s2) - d_hat[s2])
 
             actions_out.append([a0, a1])
 

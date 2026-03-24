@@ -5,7 +5,7 @@ Learns Ψ(s,a) ∈ ℝ³ (discounted expected future features) via SARSA-style T
 Q-values are reconstructed on-the-fly for each goal: Q_g(s,a) = Ψ(s,a) · w_g.
 Enables zero-shot transfer to new goals by swapping w_g only.
 
-Parameters (3): gamma, alpha_sf, tau
+Parameters (3): gamma, alpha_psi, lam
 """
 
 import numpy as np
@@ -16,9 +16,9 @@ from env import Env
 class SF:
 
     PARAM_SPEC = [
-        ('gamma',    'logit'),
-        ('alpha_sf', 'logit'),
-        ('tau',      'log'),
+        ('gamma',     'logit'), # \gamma
+        ('alpha_psi', 'logit'), # \alpha_\psi (SF learning rate)
+        ('lam',       'log'),   # \lambda (Softmax temperature)
     ]
     N_PARAMS  = len(PARAM_SPEC)
     PHI_DIM   = 3
@@ -29,9 +29,9 @@ class SF:
                 for s in Env.NON_TERMINAL}
 
     def _run(self, trial_sequence, params, actions_in, rng):
-        gamma    = params['gamma']
-        alpha_sf = params['alpha_sf']
-        tau      = params['tau']
+        gamma     = params['gamma']
+        alpha_psi = params['alpha_psi']
+        lam       = params['lam']
 
         Psi = self._init_Psi()
         ll  = 0.0
@@ -42,7 +42,7 @@ class SF:
 
             # ── Stage 1: root s=0 ─────────────────────────────────────────────
             q0  = Psi[0] @ w_g
-            pi0 = softmax(q0, tau)
+            pi0 = softmax(q0, lam)
             if actions_in is None:
                 a0 = int(rng.choice(3, p=pi0))
             else:
@@ -52,7 +52,7 @@ class SF:
 
             # ── Stage 2: intermediate state s1 ───────────────────────────────
             q1  = Psi[s1] @ w_g
-            pi1 = softmax(q1, tau)
+            pi1 = softmax(q1, lam)
             if actions_in is None:
                 a1 = int(rng.choice(Env.N_ACTIONS[s1], p=pi1))
             else:
@@ -62,9 +62,9 @@ class SF:
 
             # ── SF updates (SARSA-style, online forward) ──────────────────────
             # s0→s1: φ(s1)=0 for non-terminal s1
-            Psi[0][a0]  += alpha_sf * (gamma * Psi[s1][a1] - Psi[0][a0])
+            Psi[0][a0]  += alpha_psi * (gamma * Psi[s1][a1] - Psi[0][a0])
             # s1→s2: s2 is terminal, γ·Ψ(s2,·)=0
-            Psi[s1][a1] += alpha_sf * (Env.phi(s2) - Psi[s1][a1])
+            Psi[s1][a1] += alpha_psi * (Env.phi(s2) - Psi[s1][a1])
 
             actions_out.append([a0, a1])
 

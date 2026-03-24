@@ -7,45 +7,51 @@ Q-values are computed via Q_g(s,a) = Ψ(s,a) · w_g, then:
 
 p0(a) is state-agnostic (see mfp.py for full description).
 
-Parameters (6): gamma, alpha_sf, tau, alpha_m, h, lam
+Parameters (6): gamma, alpha_psi, lam, alpha_0, h, epsilon
 """
 
 import numpy as np
 from env import Env
 
-
 class SFP:
 
+    # FIXED: Parameters exactly match Lines 798-801 in the paper
     PARAM_SPEC = [
-        ('gamma',    'logit'),
-        ('alpha_sf', 'logit'),
-        ('tau',      'log'),
-        ('alpha_m',  'logit'),
-        ('h',        'log'),
-        ('lam',      'logit'),
+        ('gamma',     'logit'), # \gamma
+        ('alpha_psi', 'logit'), # \alpha_\psi (SF learning rate)
+        ('lam',       'log'),   # \lambda (Softmax temperature)
+        ('alpha_0',   'logit'), # \alpha_0 (Perseveration learning rate)
+        ('h',         'log'),   # h (Tendency to perseverate)
+        ('epsilon',   'logit'), # \epsilon (Lapse rate)
     ]
     N_PARAMS = len(PARAM_SPEC)
     PHI_DIM  = 3
 
     @staticmethod
-    def _persev_policy(q_vals, p0, n_actions, tau, h, lam):
-        """Perseveration policy at a single state (paper Eq. 20)."""
+    def _persev_policy(q_vals, p0, n_actions, lam, h, epsilon):
+        """Perseveration policy at a single state using the exact MFP formulation."""
         p0_s   = p0[:n_actions]
-        logits = q_vals / tau + h * (1 - lam) * p0_s
+        
+        # FIXED: Variable names updated. 
+        # (Optional: You could leave out the `+ (epsilon / n_actions)` for computational 
+        # efficiency, but keeping it makes it literally faithful to Eq 20).
+        persev_term = h * ((1 - epsilon) * p0_s + (epsilon / n_actions))
+        
+        logits = (q_vals / lam) + persev_term
         logits = logits - logits.max()
         unnorm = np.exp(logits)
         return unnorm / unnorm.sum()
 
     def _run(self, trial_sequence, params, pi0_init, actions_in, rng):
-        gamma    = params['gamma']
-        alpha_sf = params['alpha_sf']
-        tau      = params['tau']
-        alpha_m  = params['alpha_m']
-        h        = params['h']
-        lam      = params['lam']
+        # FIXED: Unpacking matching parameters
+        gamma     = params['gamma']
+        alpha_psi = params['alpha_psi']
+        lam       = params['lam']
+        alpha_0   = params['alpha_0']
+        h         = params['h']
+        epsilon   = params['epsilon']
 
         Psi = {s: np.zeros((Env.N_ACTIONS[s], self.PHI_DIM)) for s in Env.NON_TERMINAL}
-        # Single state-agnostic perseveration memory (length 3 = max actions)
         p0  = pi0_init[0].copy()
 
         ll = 0.0
@@ -56,7 +62,7 @@ class SFP:
 
             # ── Stage 1 ───────────────────────────────────────────────────────
             q0  = Psi[0] @ w_g
-            pi0 = self._persev_policy(q0, p0, 3, tau, h, lam)
+            pi0 = self._persev_policy(q0, p0, 3, lam, h, epsilon)
             if actions_in is None:
                 a0 = int(rng.choice(3, p=pi0))
             else:
@@ -67,7 +73,7 @@ class SFP:
             # ── Stage 2 ───────────────────────────────────────────────────────
             n1  = Env.N_ACTIONS[s1]
             q1  = Psi[s1] @ w_g
-            pi1 = self._persev_policy(q1, p0, n1, tau, h, lam)
+            pi1 = self._persev_policy(q1, p0, n1, lam, h, epsilon)
             if actions_in is None:
                 a1 = int(rng.choice(n1, p=pi1))
             else:
@@ -76,17 +82,19 @@ class SFP:
             s2 = Env.step(s1, a1)
 
             # ── SF updates (SARSA-style) ──────────────────────────────────────
-            Psi[0][a0]  += alpha_sf * (gamma * Psi[s1][a1] - Psi[0][a0])
-            Psi[s1][a1] += alpha_sf * (Env.phi(s2) - Psi[s1][a1])
+            # FIXED: Using alpha_psi
+            Psi[0][a0]  += alpha_psi * (gamma * Psi[s1][a1] - Psi[0][a0])
+            Psi[s1][a1] += alpha_psi * (Env.phi(s2) - Psi[s1][a1])
 
-            # ── Perseveration update (state-agnostic, Eq. 21) ─────────────────
+            # ── Perseveration update (state-agnostic, Eq. 21 fixed) ───────────
+            # FIXED: Using alpha_0
             one_hot = np.zeros(3)
             one_hot[a0] = 1.0
-            p0 += alpha_m * (one_hot - p0)
+            p0 += alpha_0 * (one_hot - p0)
 
             one_hot = np.zeros(3)
             one_hot[a1] = 1.0
-            p0 += alpha_m * (one_hot - p0)
+            p0 += alpha_0 * (one_hot - p0)
 
             actions_out.append([a0, a1])
 
