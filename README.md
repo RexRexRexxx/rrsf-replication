@@ -13,8 +13,8 @@ The paper fits 8 RL models to multi-task learning behavior in substance use diso
 Requires Python 3.12 and [`uv`](https://github.com/astral-sh/uv).
 
 ```bash
-uv sync                  # install dependencies into .venv
-uv run jupyter notebook  # launch notebooks
+uv sync --all-groups                        # install dependencies + dev group (ipykernel)
+uv run --with jupyter jupyter notebook      # launch notebooks
 ```
 
 Select the `.venv/bin/python` kernel in Jupyter.
@@ -103,8 +103,8 @@ A qualitative replication via forward simulation — no MAP fitting. Virtual HC 
 需要 Python 3.12 和 [`uv`](https://github.com/astral-sh/uv)。
 
 ```bash
-uv sync                  # 将依赖安装至 .venv
-uv run jupyter notebook  # 启动 notebook
+uv sync --all-groups                        # 安装依赖及 dev 组（含 ipykernel）
+uv run --with jupyter jupyter notebook      # 启动 notebook
 ```
 
 在 Jupyter 中选择 `.venv/bin/python` 内核。
