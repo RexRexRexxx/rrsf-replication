@@ -2,7 +2,7 @@
 
 Computational replication of the reinforcement learning models from:
 
-> Fang, Gao, Xia, Cheng et al. (2026). *Imbalanced learning efficiency and cognitive effort in individuals with substance use disorder.*
+> Fang et al. (2026). *Imbalanced learning efficiency and cognitive effort in individuals with substance use disorder.*
 
 The paper fits 8 RL models to multi-task learning behavior in substance use disorder (SUD) vs. healthy controls (HC), finding that the Resource-Rational Successor Features model (RRSF) best accounts for the data.
 
@@ -92,7 +92,7 @@ A qualitative replication via forward simulation — no MAP fitting. Virtual HC 
 
 对以下论文中强化学习模型的计算复现：
 
-> Fang, Gao, Xia, Cheng 等 (2026). *物质使用障碍个体的不平衡学习效率与认知努力。*
+> Fang et al. (2026). *Imbalanced learning efficiency and cognitive effort in individuals with substance use disorder.*
 
 该论文将 8 个强化学习模型拟合至物质使用障碍（SUD）患者与健康对照（HC）的多任务学习行为数据，发现资源理性继承特征模型（RRSF）对数据的解释最优。
 
